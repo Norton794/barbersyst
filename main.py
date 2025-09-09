@@ -408,8 +408,9 @@ elif escolha == "📊 Relatórios":
         ano_atual = datetime.now().year
         anos = list(range(2020, ano_atual + 1))  # De 2020 até ano atual
 
-        col1 = st.columns(1)
-        with col1[0]:
+        col1, col2 = st.columns(2)
+
+        with col1:
             ano = st.selectbox(
                 "Ano",
                 anos,
@@ -417,23 +418,54 @@ elif escolha == "📊 Relatórios":
                     ano_atual) if ano_atual in anos else len(anos)-1
             )
 
+        with col2:
+            meses_opcoes = ['Todos'] + ['Janeiro', 'Fevereiro', 'Março', 'Abril',
+                                        'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+            mes_selecionado = st.selectbox("Mês", meses_opcoes)
+
         if escolha_men == "Faturamento Geral":
 
             conn = sqlite3.connect("barbearia.db")
-            query = """
-                SELECT 
-                    strftime('%m', p.data_pagamento) as mes,
-                    s.nome as servico,
-                    SUM(p.valor) as valor_total,
-                    COUNT(p.id) as quantidade
-                FROM pagamentos p
-                JOIN servicos s ON p.servico_id = s.id
-                WHERE strftime('%Y', p.data_pagamento) = ?
-                GROUP BY strftime('%m', p.data_pagamento), s.nome
-                ORDER BY mes, servico
-            """
 
-            df = pd.read_sql(query, conn, params=(str(ano),))
+            if mes_selecionado == 'Todos':
+                query = """
+                    SELECT 
+                        strftime('%m', p.data_pagamento) as mes,
+                        s.nome as servico,
+                        SUM(p.valor) as valor_total,
+                        COUNT(p.id) as quantidade
+                    FROM pagamentos p
+                    JOIN servicos s ON p.servico_id = s.id
+                    WHERE strftime('%Y', p.data_pagamento) = ?
+                    GROUP BY strftime('%m', p.data_pagamento), s.nome
+                    ORDER BY mes, servico
+                """
+                params = (str(ano),)
+            else:
+                # Converter nome do mês para número
+                meses_num = {
+                    'Janeiro': '01', 'Fevereiro': '02', 'Março': '03', 'Abril': '04',
+                    'Maio': '05', 'Junho': '06', 'Julho': '07', 'Agosto': '08',
+                    'Setembro': '09', 'Outubro': '10', 'Novembro': '11', 'Dezembro': '12'
+                }
+                mes_num = meses_num[mes_selecionado]
+
+                query = """
+                    SELECT 
+                        strftime('%m', p.data_pagamento) as mes,
+                        s.nome as servico,
+                        SUM(p.valor) as valor_total,
+                        COUNT(p.id) as quantidade
+                    FROM pagamentos p
+                    JOIN servicos s ON p.servico_id = s.id
+                    WHERE strftime('%Y', p.data_pagamento) = ? 
+                    AND strftime('%m', p.data_pagamento) = ?
+                    GROUP BY strftime('%m', p.data_pagamento), s.nome
+                    ORDER BY mes, servico
+                """
+                params = (str(ano), mes_num)
+
+            df = pd.read_sql(query, conn, params=params)
             conn.close()
 
             if not df.empty:
@@ -451,7 +483,8 @@ elif escolha == "📊 Relatórios":
                 df = df.sort_values('mes_num')
 
                 # Mostrar métricas gerais
-                st.subheader(f"Faturamento {ano}")
+                periodo_titulo = f"{ano}" if mes_selecionado == 'Todos' else f"{mes_selecionado}/{ano}"
+                st.subheader(f"Faturamento {periodo_titulo}")
 
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -472,7 +505,7 @@ elif escolha == "📊 Relatórios":
                     x='mes_nome',
                     y='valor_total',
                     color='servico',
-                    title=f'Faturamento Mensal por Serviço - {ano}',
+                    title=f'Faturamento por Serviço - {periodo_titulo}',
                     labels={
                         'valor_total': 'Faturamento (R$)',
                         'mes_nome': 'Mês',
@@ -556,14 +589,15 @@ elif escolha == "📊 Relatórios":
                 )
 
                 fig_donut.update_layout(
-                    title=f"Distribuição do Faturamento por Serviço - {ano}",
+                    title=f"Distribuição do Faturamento por Serviço - {periodo_titulo}",
                     showlegend=True
                 )
 
                 st.plotly_chart(fig_donut, use_container_width=True)
 
             else:
-                st.info(f"Nenhum dado encontrado para o ano {ano}")
+                periodo_msg = f"o ano {ano}" if mes_selecionado == 'Todos' else f"{mes_selecionado}/{ano}"
+                st.info(f"Nenhum dado encontrado para {periodo_msg}")
 
         elif escolha_men == "Ticket médio mensal":
             st.subheader("Ticket Médio Mensal")
@@ -574,37 +608,69 @@ elif escolha == "📊 Relatórios":
             conn = sqlite3.connect("barbearia.db")
 
             # Query para ticket médio mensal
-            query = """
-                SELECT 
-                    strftime('%m', p.data_pagamento) as mes,
-                    COUNT(p.id) as quantidade_servicos,
-                    SUM(p.valor) as faturamento_total,
-                    ROUND(SUM(p.valor) / COUNT(p.id), 2) as ticket_medio
-                FROM pagamentos p
-                JOIN servicos s ON p.servico_id = s.id
-                WHERE strftime('%Y', p.data_pagamento) = ?
-                GROUP BY strftime('%m', p.data_pagamento)
-                ORDER BY mes
-            """
+            if mes_selecionado == 'Todos':
+                query = """
+                    SELECT 
+                        strftime('%m', p.data_pagamento) as mes,
+                        COUNT(p.id) as quantidade_servicos,
+                        SUM(p.valor) as faturamento_total,
+                        ROUND(SUM(p.valor) / COUNT(p.id), 2) as ticket_medio
+                    FROM pagamentos p
+                    JOIN servicos s ON p.servico_id = s.id
+                    WHERE strftime('%Y', p.data_pagamento) = ?
+                    GROUP BY strftime('%m', p.data_pagamento)
+                    ORDER BY mes
+                """
+                params_atual = (str(ano),)
+                params_anterior = (
+                    str(ano - 1),) if comparar_ano and ano > 2020 else None
+            else:
+                # Converter nome do mês para número
+                meses_num = {
+                    'Janeiro': '01', 'Fevereiro': '02', 'Março': '03', 'Abril': '04',
+                    'Maio': '05', 'Junho': '06', 'Julho': '07', 'Agosto': '08',
+                    'Setembro': '09', 'Outubro': '10', 'Novembro': '11', 'Dezembro': '12'
+                }
+                mes_num = meses_num[mes_selecionado]
+
+                query = """
+                    SELECT 
+                        strftime('%m', p.data_pagamento) as mes,
+                        COUNT(p.id) as quantidade_servicos,
+                        SUM(p.valor) as faturamento_total,
+                        ROUND(SUM(p.valor) / COUNT(p.id), 2) as ticket_medio
+                    FROM pagamentos p
+                    JOIN servicos s ON p.servico_id = s.id
+                    WHERE strftime('%Y', p.data_pagamento) = ? 
+                    AND strftime('%m', p.data_pagamento) = ?
+                    GROUP BY strftime('%m', p.data_pagamento)
+                    ORDER BY mes
+                """
+                params_atual = (str(ano), mes_num)
+                params_anterior = (
+                    str(ano - 1), mes_num) if comparar_ano and ano > 2020 else None
 
             try:
                 # Dados do ano selecionado
-                df_atual = pd.read_sql(query, conn, params=(str(ano),))
+                df_atual = pd.read_sql(query, conn, params=params_atual)
 
                 # Se comparar com ano anterior
                 df_anterior = pd.DataFrame()
-                if comparar_ano and ano > 2020:
+                if comparar_ano and ano > 2020 and params_anterior:
                     df_anterior = pd.read_sql(
-                        query, conn, params=(str(ano - 1),))
+                        query, conn, params=params_anterior)
 
                 conn.close()
 
                 if not df_atual.empty:
                     # Converter mês para nome com ordem preservada
                     meses_ordenados = [
-                        ('01', 'Jan'), ('02', 'Fev'), ('03', 'Mar'), ('04', 'Abr'),
-                        ('05', 'Mai'), ('06', 'Jun'), ('07', 'Jul'), ('08', 'Ago'),
-                        ('09', 'Set'), ('10', 'Out'), ('11', 'Nov'), ('12', 'Dez')
+                        ('01', 'Janeiro'), ('02', 'Fevereiro'), ('03',
+                                                                 'Março'), ('04', 'Abril'),
+                        ('05', 'Maio'), ('06', 'Junho'), ('07',
+                                                          'Julho'), ('08', 'Agosto'),
+                        ('09', 'Setembro'), ('10', 'Outubro'), ('11',
+                                                                'Novembro'), ('12', 'Dezembro')
                     ]
 
                     meses_dict = dict(meses_ordenados)
@@ -634,28 +700,33 @@ elif escolha == "📊 Relatórios":
                     # Métricas gerais do ano atual
                     col1, col2, col3, col4 = st.columns(4)
 
+                    periodo_titulo = f"{ano}" if mes_selecionado == 'Todos' else f"{mes_selecionado}/{ano}"
+
                     with col1:
                         ticket_medio_anual = df_atual['faturamento_total'].sum(
                         ) / df_atual['quantidade_servicos'].sum()
-                        st.metric("Ticket Médio Anual",
+                        st.metric(f"Ticket Médio {periodo_titulo}",
                                   f"R$ {ticket_medio_anual:.2f}")
 
                     with col2:
                         melhor_mes = df_atual.loc[df_atual['ticket_medio'].idxmax(
                         )]
-                        st.metric("Melhor Mês", f"{melhor_mes['mes_nome']}")
+                        label_melhor = "Melhor Mês" if mes_selecionado == 'Todos' else "Mês Selecionado"
+                        st.metric(label_melhor, f"{melhor_mes['mes_nome']}")
 
                     with col3:
-                        st.metric("Ticket do Melhor Mês",
+                        label_ticket = "Ticket do Melhor Mês" if mes_selecionado == 'Todos' else "Ticket do Mês"
+                        st.metric(label_ticket,
                                   f"R$ {melhor_mes['ticket_medio']:.2f}")
 
                     with col4:
                         if len(df_atual) > 1:
                             variacao = (
                                 (df_atual['ticket_medio'].iloc[-1] - df_atual['ticket_medio'].iloc[0]) / df_atual['ticket_medio'].iloc[0]) * 100
-                            st.metric("Variação no Ano", f"{variacao:+.1f}%")
+                            st.metric("Variação no Período",
+                                      f"{variacao:+.1f}%")
                         else:
-                            st.metric("Variação no Ano", "N/A")
+                            st.metric("Variação no Período", "N/A")
 
                     # Gráfico de linha para ticket médio mensal
                     st.subheader("Evolução do Ticket Médio")
@@ -689,9 +760,12 @@ elif escolha == "📊 Relatórios":
                             '<extra></extra>'
                         ))
 
+                    titulo_grafico = f"Ticket Médio - {periodo_titulo}"
+                    if comparar_ano and not df_anterior.empty:
+                        titulo_grafico += f" vs {ano-1}"
+
                     fig.update_layout(
-                        title=f"Ticket Médio Mensal - {ano}" + (
-                            f" vs {ano-1}" if comparar_ano and not df_anterior.empty else ""),
+                        title=titulo_grafico,
                         xaxis_title="Mês",
                         yaxis_title="Ticket Médio (R$)",
                         hovermode='x unified',
@@ -795,7 +869,8 @@ elif escolha == "📊 Relatórios":
                             df_final, use_container_width=True, hide_index=True)
 
                 else:
-                    st.info(f"Nenhum dado encontrado para o ano {ano}")
+                    periodo_msg = f"o ano {ano}" if mes_selecionado == 'Todos' else f"{mes_selecionado}/{ano}"
+                    st.info(f"Nenhum dado encontrado para {periodo_msg}")
 
             except Exception as e:
                 st.error(f"Erro ao executar consulta: {e}")
@@ -803,33 +878,58 @@ elif escolha == "📊 Relatórios":
                     conn.close()
 
         elif escolha_men == "Top clientes do mês":
-            st.info(
-                f"Semana atual considerada: **{data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}**")
-
             st.subheader("Top clientes do mês")
 
             # Query para top clientes
             conn = sqlite3.connect("barbearia.db")
-            query = """
-                SELECT 
-                    c.nome,
-                    COUNT(p.id) as total_servicos,
-                    SUM(p.valor) as total_gasto,
-                    ROUND(SUM(p.valor) / COUNT(p.id), 2) as ticket_medio
-                FROM pagamentos p
-                JOIN servicos s ON p.servico_id = s.id
-                JOIN clientes c ON p.cliente_id = c.id
-                WHERE date(p.data_pagamento) BETWEEN date(?) AND date(?)
-                GROUP BY c.id, c.nome
-                ORDER BY total_gasto DESC
-                LIMIT 10
-            """
+
+            if mes_selecionado == 'Todos':
+                query = """
+                    SELECT 
+                        c.nome,
+                        COUNT(p.id) as total_servicos,
+                        SUM(p.valor) as total_gasto,
+                        ROUND(SUM(p.valor) / COUNT(p.id), 2) as ticket_medio
+                    FROM pagamentos p
+                    JOIN servicos s ON p.servico_id = s.id
+                    JOIN clientes c ON p.cliente_id = c.id
+                    WHERE strftime('%Y', p.data_pagamento) = ?
+                    GROUP BY c.id, c.nome
+                    ORDER BY total_gasto DESC
+                    LIMIT 10
+                """
+                params = (str(ano),)
+            else:
+                # Converter nome do mês para número
+                meses_num = {
+                    'Janeiro': '01', 'Fevereiro': '02', 'Março': '03', 'Abril': '04',
+                    'Maio': '05', 'Junho': '06', 'Julho': '07', 'Agosto': '08',
+                    'Setembro': '09', 'Outubro': '10', 'Novembro': '11', 'Dezembro': '12'
+                }
+                mes_num = meses_num[mes_selecionado]
+
+                query = """
+                    SELECT 
+                        c.nome,
+                        COUNT(p.id) as total_servicos,
+                        SUM(p.valor) as total_gasto,
+                        ROUND(SUM(p.valor) / COUNT(p.id), 2) as ticket_medio
+                    FROM pagamentos p
+                    JOIN servicos s ON p.servico_id = s.id
+                    JOIN clientes c ON p.cliente_id = c.id
+                    WHERE strftime('%Y', p.data_pagamento) = ? 
+                    AND strftime('%m', p.data_pagamento) = ?
+                    GROUP BY c.id, c.nome
+                    ORDER BY total_gasto DESC
+                    LIMIT 10
+                """
+                params = (str(ano), mes_num)
+
+            periodo_titulo = f"{ano}" if mes_selecionado == 'Todos' else f"{mes_selecionado}/{ano}"
+            st.info(f"Período selecionado: **{periodo_titulo}**")
 
             try:
-                df = pd.read_sql(query, conn, params=(
-                    data_inicio.strftime("%Y-%m-%d"),
-                    data_fim.strftime("%Y-%m-%d")
-                ))
+                df = pd.read_sql(query, conn, params=params)
                 conn.close()
 
                 if not df.empty:
@@ -858,7 +958,7 @@ elif escolha == "📊 Relatórios":
                     )])
 
                     fig.update_layout(
-                        title="Top 10 Clientes por Faturamento",
+                        title=f"Top 10 Clientes por Faturamento - {periodo_titulo}",
                         xaxis_title="Cliente",
                         yaxis_title="Total Gasto (R$)",
                         xaxis_tickangle=-45
@@ -883,7 +983,8 @@ elif escolha == "📊 Relatórios":
                         st.dataframe(
                             df_formatado, use_container_width=True, hide_index=True)
                 else:
-                    st.info("Nenhum cliente encontrado para o período selecionado.")
+                    st.info(
+                        f"Nenhum cliente encontrado para {periodo_titulo}.")
 
             except Exception as e:
                 st.error(f"Erro ao executar consulta: {e}")
