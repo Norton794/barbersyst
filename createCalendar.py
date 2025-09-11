@@ -97,8 +97,8 @@ def inserir_agendamento(cliente_id, servico_id, data, hora, status='agendado'):
     conn = connect_db()
     c = conn.cursor()
     try:
-        c.execute('''INSERT INTO agendamentos (cliente_id, servico_id, data, hora, status)
-                     VALUES (?, ?, ?, ?, ?)''',
+        c.execute('''INSERT INTO agendamentos (cliente_id, servico_id, data, hora, status, created_at)
+                     VALUES (?, ?, ?, ?, ?, datetime('now'))''',
                   (cliente_id, servico_id, data, hora, status))
         conn.commit()
         agendamento_id = c.lastrowid
@@ -115,7 +115,7 @@ def atualizar_agendamento(agendamento_id, cliente_id, servico_id, data, hora, st
     c = conn.cursor()
     try:
         c.execute('''UPDATE agendamentos 
-                     SET cliente_id = ?, servico_id = ?, data = ?, hora = ?, status = ?
+                     SET cliente_id = ?, servico_id = ?, data = ?, hora = ?, status = ?, created_at = datetime('now')
                      WHERE id = ?''',
                   (cliente_id, servico_id, data, hora, status, agendamento_id))
         conn.commit()
@@ -299,7 +299,8 @@ def createCalendar():
                             "📅 Data:",
                             value=datetime.now().date(),
                             min_value=datetime.now().date(),
-                            help="Selecione a data do agendamento"
+                            help="Selecione a data do agendamento",
+                            format="DD/MM/YYYY"
                         )
                     with col2:
                         opcoes_servicos = [
