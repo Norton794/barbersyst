@@ -493,7 +493,7 @@ def createCalendar():
 
             # Cancelar
             with col_btn3:
-                if st.button("❌ Cancelar", key=f"cancelar_{agendamento_id}"):
+                if st.button("❌ Cancelar Agendamento", key=f"cancelar_{agendamento_id}"):
                     sucesso, msg = atualizar_status_agendamento(
                         agendamento_id, "cancelado")
                     if sucesso:
@@ -634,12 +634,8 @@ def createCalendar():
         # Retorna o link em formato markdown
         return url_real
 
-    # df_agendamentos['link'] = df_agendamentos['preco'].apply(
-    #     lambda preco: f"https://seusite.com/detalhes?preco={preco}"
-    # )
-
-    df_agendamentos['link'] = df_agendamentos.apply(
-        criar_item_mercadopago, axis=1)
+    # df_agendamentos.apply(criar_item_mercadopago, axis=1)
+    df_agendamentos['link'] = ''
 
     df_agendamentos['data'] = pd.to_datetime(
         df_agendamentos['data']).dt.strftime('%d/%m/%Y')
