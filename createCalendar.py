@@ -5,6 +5,7 @@ from streamlit_calendar import calendar
 from datetime import datetime, timedelta
 import time
 from apimercadopago import gerar_link
+from getGoogleCalendar import criar_evento_calendar, atualizar_evento_calendar, deletar_evento_calendar
 
 # ---------------------------
 # Funções de acesso ao banco
@@ -92,6 +93,51 @@ def get_servicos_from_db():
     return df
 
 
+def get_agendamento_for_calendar(agendamento_id):
+    """
+    Busca agendamento formatado para Google Calendar
+    Retorna: dict com keys necessárias ou None se não encontrar
+    """
+    conn = connect_db()
+    query = '''
+    SELECT 
+        a.data,
+        a.hora,
+        s.duracao as duracao_servico,
+        c.nome as nome_cliente,
+        s.nome as nome_servico,
+        s.preco as preco_servico,
+        a.status
+    FROM agendamentos a
+    JOIN clientes c ON a.cliente_id = c.id
+    JOIN servicos s ON a.servico_id = s.id
+    WHERE a.id = ?
+    '''
+
+    try:
+        df = pd.read_sql_query(query, conn, params=[agendamento_id])
+        conn.close()
+
+        if df.empty:
+            return None
+
+        row = df.iloc[0]
+        agendamento_data = {
+            'data': row['data'],
+            'hora': row['hora'],
+            'duracao': int(row['duracao_servico']),
+            'cliente_nome': row['nome_cliente'],
+            'servico_nome': row['nome_servico'],
+            'preco': float(row['preco_servico']),
+            'status': row['status']
+        }
+        return agendamento_data
+
+    except Exception as e:
+        conn.close()
+        return None
+
+
 def inserir_agendamento(cliente_id, servico_id, data, hora, status='agendado'):
     """Insere um novo agendamento no banco de dados"""
     conn = connect_db()
@@ -103,6 +149,15 @@ def inserir_agendamento(cliente_id, servico_id, data, hora, status='agendado'):
         conn.commit()
         agendamento_id = c.lastrowid
         conn.close()
+        try:
+            agendamento_data = get_agendamento_for_calendar(agendamento_id)
+            if agendamento_data:
+                google_id = criar_evento_calendar(agendamento_data)
+                if google_id:
+                    c.execute(
+                        'UPDATE agendamentos SET idGoogleCalendar = ? WHERE id = ?', (google_id, agendamento_id))
+        except Exception as er:
+            return False, str(er)
         return True, agendamento_id
     except Exception as e:
         conn.close()
