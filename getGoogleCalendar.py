@@ -6,7 +6,7 @@ import os.path
 import pickle
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-CALENDAR_ID = 'primary'
+CALENDAR_ID = 'nortonsantos79@gmail.com'
 
 
 def get_google_service():
@@ -95,3 +95,4 @@ def deletar_evento_calendar(google_event_id):
         return True
     except:
         return False
+
